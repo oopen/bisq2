@@ -10,46 +10,55 @@ permissions:
   contents: read
 
 jobs:
-  build_bisq:
-    name: Build Bisq on ${{ matrix.os }}
+  build-desktop:
+    name: Build Desktop App
     strategy:
+      fail-fast: false
       matrix:
-        os: [ ubuntu-latest, ubuntu-24.04-arm, macOS-latest, windows-latest ]
-    uses: ./.github/workflows/build_bisq_module.yml
+        include:
+          - os: ubuntu-latest
+            name: Linux x64
+            arch: x64
+            type: linux
+          - os: ubuntu-24.04-arm
+            name: Linux ARM64
+            arch: arm64
+            type: linux
+          - os: macOS-latest
+            name: macOS
+            arch: x64
+            type: macos
+          - os: windows-latest
+            name: Windows x64
+            arch: x64
+            type: windows
+    uses: ./.github/workflows/build_desktop_app.yml
     with:
       os: ${{ matrix.os }}
-      name: Bisq
-      build-root-dir: .
+      name: ${{ matrix.name }}
+      arch: ${{ matrix.arch }}
+      type: ${{ matrix.type }}
+      upload-artifacts: true
 
-  build_apps_module:
-    name: Build apps module on ${{ matrix.os }}
+  build_modules:
+    name: Build Individual Modules
     strategy:
       matrix:
-        os: [ ubuntu-latest, ubuntu-24.04-arm, macOS-latest, windows-latest ]
+        include:
+          - os: ubuntu-latest
+            module: Bisq
+            build-root-dir: .
+          - os: ubuntu-latest
+            module: apps
+            build-root-dir: apps
+          - os: ubuntu-latest
+            module: network
+            build-root-dir: network
+          - os: ubuntu-latest
+            module: tor
+            build-root-dir: network/tor
     uses: ./.github/workflows/build_bisq_module.yml
     with:
       os: ${{ matrix.os }}
-      name: apps module
-      build-root-dir: apps
-
-  build_network_module:
-    name: Build network module on ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ ubuntu-latest, ubuntu-24.04-arm, macOS-latest, windows-latest ]
-    uses: ./.github/workflows/build_bisq_module.yml
-    with:
-      os: ${{ matrix.os }}
-      name: network module
-      build-root-dir: network
-
-  build_tor_module:
-    name: Build tor module on ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ ubuntu-latest, ubuntu-24.04-arm, macOS-latest, windows-latest ]
-    uses: ./.github/workflows/build_bisq_module.yml
-    with:
-      os: ${{ matrix.os }}
-      name: tor module
-      build-root-dir: network/tor
+      name: ${{ matrix.module }}
+      build-root-dir: ${{ matrix.build-root-dir }}

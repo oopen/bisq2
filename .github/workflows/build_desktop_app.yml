@@ -1,0 +1,153 @@
+name: Build Desktop App
+
+on:
+  workflow_call:
+    inputs:
+      os:
+        required: true
+        type: string
+      name:
+        required: true
+        type: string
+      arch:
+        required: true
+        type: string
+      type:
+        required: true
+        type: string
+      appimage:
+        required: false
+        type: boolean
+        default: false
+      upload-artifacts:
+        required: false
+        type: boolean
+        default: true
+      java-version:
+        required: false
+        type: string
+        default: '21'
+      ref-name:
+        required: false
+        type: string
+        default: ''
+
+jobs:
+  build-desktop:
+    name: Build ${{ inputs.name }} (${{ inputs.arch }})
+    runs-on: ${{ inputs.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Setup Java JDK
+        uses: actions/setup-java@v5.2.0
+        with:
+          java-version: ${{ inputs.java-version }}
+          distribution: 'zulu'
+
+      - name: Cache Gradle dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ inputs.arch }}-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-${{ inputs.arch }}-
+            gradle-${{ runner.os }}-
+
+      - name: Build with Gradle
+        run: ./gradlew build -x test
+
+      - name: Create Distribution
+        run: ./gradlew apps:desktop:desktop-app-launcher:installDist
+
+      # Linux Packaging (deb, rpm, AppImage)
+      - name: Package Native (Linux)
+        if: inputs.type == 'linux'
+        run: |
+          ./gradlew apps:desktop:desktop-app-launcher:generateInstallers
+          # Renommer les packages avec architecture
+          for f in apps/desktop/desktop-app-launcher/build/packaging/jpackage/packages/*.deb; do
+            mv "$f" "apps/desktop/desktop-app-launcher/build/packaging/jpackage/packages/bisq2-${{ inputs.ref-name || github.ref_name }}-linux-${{ inputs.arch }}.deb" 2>/dev/null || true
+          done
+          for f in apps/desktop/desktop-app-launcher/build/packaging/jpackage/packages/*.rpm; do
+            mv "$f" "apps/desktop/desktop-app-launcher/build/packaging/jpackage/packages/bisq2-${{ inputs.ref-name || github.ref_name }}-linux-${{ inputs.arch }}.rpm" 2>/dev/null || true
+          done
+
+      # AppImage Creation
+      - name: Create AppImage (Linux)
+        if: inputs.type == 'linux' && inputs.appimage == true
+        run: |
+          # Installer appimagetool
+          sudo apt-get update && sudo apt-get install -y libfuse2
+          wget -q https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage -O appimagetool
+          chmod +x appimagetool
+          
+          # Préparer l'AppDir
+          mkdir -p Bisq2.AppDir/usr/bin
+          cp -r apps/desktop/desktop-app-launcher/build/install/desktop-app-launcher/* Bisq2.AppDir/usr/bin/
+          
+          # Créer le fichier desktop
+          cat > Bisq2.AppDir/bisq2.desktop << 'EOF'
+          [Desktop Entry]
+          Name=Bisq 2
+          Exec=bisq2
+          Icon=bisq2
+          Type=Application
+          Categories=Office;Finance;
+          EOF
+          
+          # Copier l'icône (si disponible)
+          find . -name "*.png" -path "*/desktop-app-launcher/*" | head -1 | xargs -I {} cp {} Bisq2.AppDir/bisq2.png || true
+          
+          # Créer l'AppImage
+          ARCH=${{ inputs.arch == 'arm64' && 'aarch64' || 'x86_64' }} ./appimagetool Bisq2.AppDir \
+            "apps/desktop/desktop-app-launcher/build/packaging/jpackage/packages/bisq2-${{ inputs.ref-name || github.ref_name }}-linux-${{ inputs.arch }}.AppImage"
+
+      # macOS Packaging
+      - name: Package Native (macOS)
+        if: inputs.type == 'macos'
+        run: |
+          ./gradlew apps:desktop:desktop-app-launcher:generateInstallers
+          mv apps/desktop/desktop-app-launcher/build/packaging/jpackage/packages/*.dmg \
+             "apps/desktop/desktop-app-launcher/build/packaging/jpackage/packages/bisq2-${{ inputs.ref-name || github.ref_name }}-macos-${{ inputs.arch }}.dmg" || true
+
+      # Windows Packaging
+      - name: Package Native (Windows)
+        if: inputs.type == 'windows'
+        run: |
+          ./gradlew apps:desktop:desktop-app-launcher:generateInstallers
+        shell: cmd
+
+      - name: Rename Windows Artifact
+        if: inputs.type == 'windows'
+        run: |
+          $files = Get-ChildItem -Path "apps/desktop/desktop-app-launcher/build/packaging/jpackage/packages" -Filter "*.exe"
+          foreach ($file in $files) {
+            $newName = "bisq2-${{ inputs.ref-name || github.ref_name }}-windows-${{ inputs.arch }}.exe"
+            Rename-Item -Path $file.FullName -NewName $newName
+          }
+          $files = Get-ChildItem -Path "apps/desktop/desktop-app-launcher/build/packaging/jpackage/packages" -Filter "*.msi"
+          foreach ($file in $files) {
+            $newName = "bisq2-${{ inputs.ref-name || github.ref_name }}-windows-${{ inputs.arch }}.msi"
+            Rename-Item -Path $file.FullName -NewName $newName
+          }
+        shell: pwsh
+
+      - name: Upload Build Artifacts
+        if: inputs.upload-artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: bisq2-${{ inputs.name }}-${{ inputs.arch }}
+          path: |
+            apps/desktop/desktop-app-launcher/build/packaging/jpackage/packages/*.deb
+            apps/desktop/desktop-app-launcher/build/packaging/jpackage/packages/*.rpm
+            apps/desktop/desktop-app-launcher/build/packaging/jpackage/packages/*.AppImage
+            apps/desktop/desktop-app-launcher/build/packaging/jpackage/packages/*.dmg
+            apps/desktop/desktop-app-launcher/build/packaging/jpackage/packages/*.exe
+            apps/desktop/desktop-app-launcher/build/packaging/jpackage/packages/*.msi
+          if-no-files-found: ignore

@@ -12,7 +12,6 @@ permissions:
 jobs:
   build-release:
     name: Build ${{ matrix.name }} (${{ matrix.arch }})
-    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
@@ -54,110 +53,15 @@ jobs:
             name: Windows ARM64
             arch: arm64
             type: windows
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
-
-      - name: Setup Java JDK
-        uses: actions/setup-java@v5.2.0
-        with:
-          java-version: '21'
-          distribution: 'zulu'
-
-      - name: Build with Gradle
-        run: ./gradlew build -x test
-
-      - name: Create Distribution
-        run: ./gradlew apps:desktop:desktop-app-launcher:installDist
-
-      # Linux Packaging (deb, rpm, AppImage)
-      - name: Package Native (Linux)
-        if: matrix.type == 'linux'
-        run: |
-          ./gradlew apps:desktop:desktop-app-launcher:generateInstallers
-          # Renommer les packages avec architecture
-          for f in apps/desktop/desktop-app-launcher/build/packaging/jpackage/packages/*.deb; do
-            mv "$f" "apps/desktop/desktop-app-launcher/build/packaging/jpackage/packages/bisq2-${{ github.ref_name }}-linux-${{ matrix.arch }}.deb" 2>/dev/null || true
-          done
-          for f in apps/desktop/desktop-app-launcher/build/packaging/jpackage/packages/*.rpm; do
-            mv "$f" "apps/desktop/desktop-app-launcher/build/packaging/jpackage/packages/bisq2-${{ github.ref_name }}-linux-${{ matrix.arch }}.rpm" 2>/dev/null || true
-          done
-
-      # AppImage Creation
-      - name: Create AppImage (Linux)
-        if: matrix.type == 'linux' && matrix.appimage == true
-        run: |
-          # Installer appimagetool
-          sudo apt-get update && sudo apt-get install -y libfuse2
-          wget -q https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage -O appimagetool
-          chmod +x appimagetool
-          
-          # Préparer l'AppDir
-          mkdir -p Bisq2.AppDir/usr/bin
-          cp -r apps/desktop/desktop-app-launcher/build/install/desktop-app-launcher/* Bisq2.AppDir/usr/bin/
-          
-          # Créer le fichier desktop
-          cat > Bisq2.AppDir/bisq2.desktop << 'EOF'
-          [Desktop Entry]
-          Name=Bisq 2
-          Exec=bisq2
-          Icon=bisq2
-          Type=Application
-          Categories=Office;Finance;
-          EOF
-          
-          # Copier l'icône (si disponible)
-          find . -name "*.png" -path "*/desktop-app-launcher/*" | head -1 | xargs -I {} cp {} Bisq2.AppDir/bisq2.png || true
-          
-          # Créer l'AppImage
-          ARCH=${{ matrix.arch == 'arm64' && 'aarch64' || 'x86_64' }} ./appimagetool Bisq2.AppDir \
-            "apps/desktop/desktop-app-launcher/build/packaging/jpackage/packages/bisq2-${{ github.ref_name }}-linux-${{ matrix.arch }}.AppImage"
-
-      # macOS Packaging
-      - name: Package Native (macOS)
-        if: matrix.type == 'macos'
-        run: |
-          ./gradlew apps:desktop:desktop-app-launcher:generateInstallers
-          mv apps/desktop/desktop-app-launcher/build/packaging/jpackage/packages/*.dmg \
-             "apps/desktop/desktop-app-launcher/build/packaging/jpackage/packages/bisq2-${{ github.ref_name }}-macos-${{ matrix.arch }}.dmg" || true
-
-      # Windows Packaging
-      - name: Package Native (Windows)
-        if: matrix.type == 'windows'
-        run: |
-          ./gradlew apps:desktop:desktop-app-launcher:generateInstallers
-        shell: cmd
-
-      - name: Rename Windows Artifact
-        if: matrix.type == 'windows'
-        run: |
-          $files = Get-ChildItem -Path "apps/desktop/desktop-app-launcher/build/packaging/jpackage/packages" -Filter "*.exe"
-          foreach ($file in $files) {
-            $newName = "bisq2-${{ github.ref_name }}-windows-${{ matrix.arch }}.exe"
-            Rename-Item -Path $file.FullName -NewName $newName
-          }
-          $files = Get-ChildItem -Path "apps/desktop/desktop-app-launcher/build/packaging/jpackage/packages" -Filter "*.msi"
-          foreach ($file in $files) {
-            $newName = "bisq2-${{ github.ref_name }}-windows-${{ matrix.arch }}.msi"
-            Rename-Item -Path $file.FullName -NewName $newName
-          }
-        shell: pwsh
-
-      - name: Upload Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: bisq2-${{ matrix.name }}-${{ matrix.arch }}
-          path: |
-            apps/desktop/desktop-app-launcher/build/packaging/jpackage/packages/*.deb
-            apps/desktop/desktop-app-launcher/build/packaging/jpackage/packages/*.rpm
-            apps/desktop/desktop-app-launcher/build/packaging/jpackage/packages/*.AppImage
-            apps/desktop/desktop-app-launcher/build/packaging/jpackage/packages/*.dmg
-            apps/desktop/desktop-app-launcher/build/packaging/jpackage/packages/*.exe
-            apps/desktop/desktop-app-launcher/build/packaging/jpackage/packages/*.msi
-          if-no-files-found: ignore
+    uses: ./.github/workflows/build_desktop_app.yml
+    with:
+      os: ${{ matrix.os }}
+      name: ${{ matrix.name }}
+      arch: ${{ matrix.arch }}
+      type: ${{ matrix.type }}
+      appimage: ${{ matrix.appimage || false }}
+      upload-artifacts: true
+      ref-name: ${{ github.ref_name }}
 
   create-release:
     name: Create GitHub Release
