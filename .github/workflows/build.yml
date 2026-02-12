@@ -9,15 +9,12 @@ on:
 permissions:
   contents: read
 
-env:
-  MATRIX_OS: '["ubuntu-latest", "ubuntu-24.04-arm", "macOS-latest", "windows-latest"]'
-
 jobs:
   build_bisq:
     name: Build Bisq on ${{ matrix.os }}
     strategy:
       matrix:
-        os: ${{ fromJSON(env.MATRIX_OS) }}
+        os: [ ubuntu-latest, ubuntu-24.04-arm, macOS-latest, windows-latest ]
     uses: ./.github/workflows/build_bisq_module.yml
     with:
       os: ${{ matrix.os }}
@@ -28,7 +25,7 @@ jobs:
     name: Build apps module on ${{ matrix.os }}
     strategy:
       matrix:
-        os: ${{ fromJSON(env.MATRIX_OS) }}
+        os: [ ubuntu-latest, ubuntu-24.04-arm, macOS-latest, windows-latest ]
     uses: ./.github/workflows/build_bisq_module.yml
     with:
       os: ${{ matrix.os }}
@@ -39,7 +36,7 @@ jobs:
     name: Build network module on ${{ matrix.os }}
     strategy:
       matrix:
-        os: ${{ fromJSON(env.MATRIX_OS) }}
+        os: [ ubuntu-latest, ubuntu-24.04-arm, macOS-latest, windows-latest ]
     uses: ./.github/workflows/build_bisq_module.yml
     with:
       os: ${{ matrix.os }}
@@ -50,7 +47,7 @@ jobs:
     name: Build tor module on ${{ matrix.os }}
     strategy:
       matrix:
-        os: ${{ fromJSON(env.MATRIX_OS) }}
+        os: [ ubuntu-latest, ubuntu-24.04-arm, macOS-latest, windows-latest ]
     uses: ./.github/workflows/build_bisq_module.yml
     with:
       os: ${{ matrix.os }}
