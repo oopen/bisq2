@@ -32,7 +32,7 @@ jobs:
             appimage: true
           
           # macOS Intel (x64)
-          - os: macos-15-large
+          - os: macos-13
             name: macOS Intel
             arch: x64
             type: macos
@@ -57,7 +57,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
         with:
           fetch-depth: 1
 
@@ -71,19 +71,19 @@ jobs:
         run: ./gradlew build -x test
 
       - name: Create Distribution
-        run: ./gradlew apps:desktop:desktop-app:installDist
+        run: ./gradlew apps:desktop:desktop-app-launcher:installDist
 
       # Linux Packaging (deb, rpm, AppImage)
       - name: Package Native (Linux)
         if: matrix.type == 'linux'
         run: |
-          ./gradlew apps:desktop:desktop-app:jpackage
+          ./gradlew apps:desktop:desktop-app-launcher:generateInstallers
           # Renommer les packages avec architecture
-          for f in apps/desktop/desktop-app/build/jpackage/*.deb; do
-            mv "$f" "apps/desktop/desktop-app/build/jpackage/bisq2-${{ github.ref_name }}-linux-${{ matrix.arch }}.deb" 2>/dev/null || true
+          for f in apps/desktop/desktop-app-launcher/build/packaging/jpackage/packages/*.deb; do
+            mv "$f" "apps/desktop/desktop-app-launcher/build/packaging/jpackage/packages/bisq2-${{ github.ref_name }}-linux-${{ matrix.arch }}.deb" 2>/dev/null || true
           done
-          for f in apps/desktop/desktop-app/build/jpackage/*.rpm; do
-            mv "$f" "apps/desktop/desktop-app/build/jpackage/bisq2-${{ github.ref_name }}-linux-${{ matrix.arch }}.rpm" 2>/dev/null || true
+          for f in apps/desktop/desktop-app-launcher/build/packaging/jpackage/packages/*.rpm; do
+            mv "$f" "apps/desktop/desktop-app-launcher/build/packaging/jpackage/packages/bisq2-${{ github.ref_name }}-linux-${{ matrix.arch }}.rpm" 2>/dev/null || true
           done
 
       # AppImage Creation
@@ -97,7 +97,7 @@ jobs:
           
           # Préparer l'AppDir
           mkdir -p Bisq2.AppDir/usr/bin
-          cp -r apps/desktop/desktop-app/build/install/desktop-app/* Bisq2.AppDir/usr/bin/
+          cp -r apps/desktop/desktop-app-launcher/build/install/desktop-app-launcher/* Bisq2.AppDir/usr/bin/
           
           # Créer le fichier desktop
           cat > Bisq2.AppDir/bisq2.desktop << 'EOF'
@@ -110,36 +110,36 @@ jobs:
           EOF
           
           # Copier l'icône (si disponible)
-          find . -name "*.png" -path "*/desktop-app/*" | head -1 | xargs -I {} cp {} Bisq2.AppDir/bisq2.png || true
+          find . -name "*.png" -path "*/desktop-app-launcher/*" | head -1 | xargs -I {} cp {} Bisq2.AppDir/bisq2.png || true
           
           # Créer l'AppImage
           ARCH=${{ matrix.arch == 'arm64' && 'aarch64' || 'x86_64' }} ./appimagetool Bisq2.AppDir \
-            "apps/desktop/desktop-app/build/jpackage/bisq2-${{ github.ref_name }}-linux-${{ matrix.arch }}.AppImage"
+            "apps/desktop/desktop-app-launcher/build/packaging/jpackage/packages/bisq2-${{ github.ref_name }}-linux-${{ matrix.arch }}.AppImage"
 
       # macOS Packaging
       - name: Package Native (macOS)
         if: matrix.type == 'macos'
         run: |
-          ./gradlew apps:desktop:desktop-app:jpackage
-          mv apps/desktop/desktop-app/build/jpackage/*.dmg \
-             "apps/desktop/desktop-app/build/jpackage/bisq2-${{ github.ref_name }}-macos-${{ matrix.arch }}.dmg" || true
+          ./gradlew apps:desktop:desktop-app-launcher:generateInstallers
+          mv apps/desktop/desktop-app-launcher/build/packaging/jpackage/packages/*.dmg \
+             "apps/desktop/desktop-app-launcher/build/packaging/jpackage/packages/bisq2-${{ github.ref_name }}-macos-${{ matrix.arch }}.dmg" || true
 
       # Windows Packaging
       - name: Package Native (Windows)
         if: matrix.type == 'windows'
         run: |
-          ./gradlew apps:desktop:desktop-app:jpackage
+          ./gradlew apps:desktop:desktop-app-launcher:generateInstallers
         shell: cmd
 
       - name: Rename Windows Artifact
         if: matrix.type == 'windows'
         run: |
-          $files = Get-ChildItem -Path "apps/desktop/desktop-app/build/jpackage" -Filter "*.exe"
+          $files = Get-ChildItem -Path "apps/desktop/desktop-app-launcher/build/packaging/jpackage/packages" -Filter "*.exe"
           foreach ($file in $files) {
             $newName = "bisq2-${{ github.ref_name }}-windows-${{ matrix.arch }}.exe"
             Rename-Item -Path $file.FullName -NewName $newName
           }
-          $files = Get-ChildItem -Path "apps/desktop/desktop-app/build/jpackage" -Filter "*.msi"
+          $files = Get-ChildItem -Path "apps/desktop/desktop-app-launcher/build/packaging/jpackage/packages" -Filter "*.msi"
           foreach ($file in $files) {
             $newName = "bisq2-${{ github.ref_name }}-windows-${{ matrix.arch }}.msi"
             Rename-Item -Path $file.FullName -NewName $newName
@@ -151,12 +151,12 @@ jobs:
         with:
           name: bisq2-${{ matrix.name }}-${{ matrix.arch }}
           path: |
-            apps/desktop/desktop-app/build/jpackage/*.deb
-            apps/desktop/desktop-app/build/jpackage/*.rpm
-            apps/desktop/desktop-app/build/jpackage/*.AppImage
-            apps/desktop/desktop-app/build/jpackage/*.dmg
-            apps/desktop/desktop-app/build/jpackage/*.exe
-            apps/desktop/desktop-app/build/jpackage/*.msi
+            apps/desktop/desktop-app-launcher/build/packaging/jpackage/packages/*.deb
+            apps/desktop/desktop-app-launcher/build/packaging/jpackage/packages/*.rpm
+            apps/desktop/desktop-app-launcher/build/packaging/jpackage/packages/*.AppImage
+            apps/desktop/desktop-app-launcher/build/packaging/jpackage/packages/*.dmg
+            apps/desktop/desktop-app-launcher/build/packaging/jpackage/packages/*.exe
+            apps/desktop/desktop-app-launcher/build/packaging/jpackage/packages/*.msi
           if-no-files-found: ignore
 
   create-release:
